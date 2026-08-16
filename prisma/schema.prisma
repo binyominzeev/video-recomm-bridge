@@ -1,0 +1,107 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+enum Platform {
+  YOUTUBE
+  INSTAGRAM
+  FACEBOOK
+}
+
+enum SourceStatus {
+  PENDING
+  DISCOVERING
+  DONE
+  ERROR
+}
+
+enum VideoStatus {
+  DISCOVERED
+  SELECTED
+  DOWNLOADING
+  DOWNLOADED
+  TRANSCRIBING
+  TRANSCRIBED
+  EXTRACTING
+  EXTRACTED
+  FAILED
+  SKIPPED
+}
+
+model Source {
+  id                  String       @id @default(cuid())
+  url                 String       @unique
+  platform            Platform
+  name                String
+  requestedVideoCount Int
+  status              SourceStatus @default(PENDING)
+  errorMessage        String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  videos              Video[]
+}
+
+model Video {
+  id           String               @id @default(cuid())
+  sourceId     String
+  source       Source               @relation(fields: [sourceId], references: [id])
+  externalId   String
+  url          String
+  title        String
+  description  String?
+  thumbnail    String?
+  publishedAt  DateTime?
+  duration     Int?
+  viewCount    BigInt?
+  status       VideoStatus          @default(DISCOVERED)
+  errorMessage String?
+  audioPath    String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  transcripts  Transcript[]
+  extractions  Extraction[]
+  costEvents   CostEvent[]
+  embedding    Unsupported("vector(1536)")?
+
+  @@unique([sourceId, externalId])
+}
+
+model Transcript {
+  id         String   @id @default(cuid())
+  videoId    String
+  video      Video    @relation(fields: [videoId], references: [id])
+  provider   String
+  text       String
+  language   String?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+}
+
+model Extraction {
+  id            String   @id @default(cuid())
+  videoId       String
+  video         Video    @relation(fields: [videoId], references: [id])
+  model         String
+  promptVersion String
+  rawJson       Json
+  createdAt     DateTime @default(now())
+}
+
+model CostEvent {
+  id            String   @id @default(cuid())
+  videoId       String?
+  video         Video?   @relation(fields: [videoId], references: [id])
+  stage         String
+  provider      String
+  inputUnits    Float?
+  outputUnits   Float?
+  estimatedCost Float
+  createdAt     DateTime @default(now())
+}
