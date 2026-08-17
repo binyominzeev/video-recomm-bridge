@@ -45,12 +45,29 @@ interface VideoDetail {
     estimatedCost: number;
     createdAt: string;
   }>;
+  evaluations: Array<{
+    id: string;
+    model: string;
+    promptVersion: string;
+    projectRelevanceScore: number;
+    projectRelevance: string;
+    relevanceTypes: string[];
+    contentOrientation: string;
+    targetNarratives: string[];
+    recommendationValueScore: number;
+    recommendationValue: string;
+    reason: string;
+    exclude: boolean;
+    excludeReason?: string | null;
+    createdAt: string;
+  }>;
 }
 
 const COMPLETED_STATUS_BY_STAGE: Record<string, string> = {
   full: "EXTRACTED",
   transcribe: "TRANSCRIBED",
   extract: "EXTRACTED",
+  evaluate: "EXTRACTED",
   embed: "EXTRACTED",
 };
 
@@ -135,6 +152,7 @@ export default function VideoDetailPage() {
   if (!video) return <div className="text-gray-500">Loading...</div>;
 
   const latestExtraction = video.extractions[0];
+  const latestEvaluation = video.evaluations[0];
   const latestTranscript = video.transcripts[0];
   const totalCost = video.costEvents.reduce(
     (sum, event) => sum + event.estimatedCost,
@@ -245,6 +263,13 @@ export default function VideoDetailPage() {
           >
             {running === "extract" ? "Running..." : "Re-extract"}
           </button>
+          <button
+            onClick={() => runStage("evaluate")}
+            disabled={!!running}
+            className="rounded bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            {running === "evaluate" ? "Running..." : "Re-evaluate"}
+          </button>
         </div>
 
         {totalCost > 0 && (
@@ -253,6 +278,78 @@ export default function VideoDetailPage() {
           </div>
         )}
       </div>
+
+      {latestEvaluation && (
+        <div className="mb-6 rounded-lg bg-white p-6 shadow">
+          <h2 className="mb-3 font-semibold text-gray-700">
+            Counter-recommendation Evaluation ({latestEvaluation.model} ·{" "}
+            {latestEvaluation.promptVersion})
+          </h2>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <span className="rounded-full bg-indigo-100 px-2 py-1 text-xs text-indigo-700">
+              Project relevance: {latestEvaluation.projectRelevance} (
+              {latestEvaluation.projectRelevanceScore.toFixed(2)})
+            </span>
+            <span className="rounded-full bg-teal-100 px-2 py-1 text-xs text-teal-700">
+              Recommendation value: {latestEvaluation.recommendationValue} (
+              {latestEvaluation.recommendationValueScore.toFixed(2)})
+            </span>
+            <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">
+              {latestEvaluation.contentOrientation}
+            </span>
+            {latestEvaluation.exclude && (
+              <span className="rounded-full bg-red-100 px-2 py-1 text-xs text-red-700">
+                Excluded
+              </span>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase text-gray-500">
+                Reason
+              </h3>
+              <p className="text-sm text-gray-700">{latestEvaluation.reason}</p>
+            </div>
+            {latestEvaluation.exclude && latestEvaluation.excludeReason && (
+              <div>
+                <h3 className="mb-1 text-xs font-semibold uppercase text-gray-500">
+                  Exclude reason
+                </h3>
+                <p className="text-sm text-gray-700">
+                  {latestEvaluation.excludeReason}
+                </p>
+              </div>
+            )}
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase text-gray-500">
+                Relevance Types
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {latestEvaluation.relevanceTypes.map((type) => (
+                  <span
+                    key={type}
+                    className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700"
+                  >
+                    {type}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase text-gray-500">
+                Target Narratives
+              </h3>
+              <div className="space-y-1">
+                {latestEvaluation.targetNarratives.map((narrative, index) => (
+                  <p key={index} className="text-sm text-gray-700">
+                    {narrative}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {latestTranscript && (
         <div className="mb-6 rounded-lg bg-white p-6 shadow">

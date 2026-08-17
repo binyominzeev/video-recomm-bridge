@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   runEmbedding,
+  runEvaluation,
   runExtraction,
   runFullPipeline,
   runTranscription,
@@ -39,6 +40,10 @@ export async function POST(
     );
   } else if (stage === "extract") {
     void runExtraction(params.id).catch((error) =>
+      logBackgroundFailure(stage, params.id, error)
+    );
+  } else if (stage === "evaluate") {
+    void runEvaluation(params.id).catch((error) =>
       logBackgroundFailure(stage, params.id, error)
     );
   } else if (stage === "embed") {

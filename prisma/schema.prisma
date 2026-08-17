@@ -67,6 +67,7 @@ model Video {
   updatedAt    DateTime             @updatedAt
   transcripts  Transcript[]
   extractions  Extraction[]
+  evaluations  Evaluation[]
   costEvents   CostEvent[]
   embedding    Unsupported("vector(1536)")?
 
@@ -92,6 +93,26 @@ model Extraction {
   promptVersion String
   rawJson       Json
   createdAt     DateTime @default(now())
+}
+
+model Evaluation {
+  id                       String   @id @default(cuid())
+  videoId                  String
+  video                    Video    @relation(fields: [videoId], references: [id])
+  model                    String
+  promptVersion            String
+  projectRelevanceScore    Float
+  projectRelevance         String
+  relevanceTypes           String[]
+  contentOrientation       String
+  targetNarratives         String[]
+  recommendationValueScore Float
+  recommendationValue      String
+  reason                   String
+  exclude                  Boolean
+  excludeReason            String?
+  rawJson                  Json
+  createdAt                DateTime @default(now())
 }
 
 model CostEvent {

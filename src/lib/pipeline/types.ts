@@ -3,4 +3,5 @@ export type PipelineStage =
   | "download"
   | "transcribe"
   | "extract"
+  | "evaluate"
   | "embed";

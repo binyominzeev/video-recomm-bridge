@@ -13,6 +13,7 @@ export async function GET(
       source: true,
       transcripts: { orderBy: { createdAt: "desc" } },
       extractions: { orderBy: { createdAt: "desc" } },
+      evaluations: { orderBy: { createdAt: "desc" } },
       costEvents: { orderBy: { createdAt: "asc" } },
     },
   });

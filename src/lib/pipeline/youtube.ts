@@ -136,3 +136,53 @@ export async function downloadAudio(
     );
   }
 }
+
+export async function downloadYouTubeSubtitles(
+  videoUrl: string,
+  outputDir: string
+): Promise<string | null> {
+  // Create output directory if it doesn't exist
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const subtitlePath = path.join(outputDir, "subtitles");
+
+  // Try to download both manual and auto-generated captions
+  const args = [
+    "--write-subs",           // Manual captions
+    "--write-auto-subs",      // Auto-generated captions
+    "--sub-lang",
+    "en",
+    "--skip-download",
+    "--no-playlist",
+    "--no-warnings",
+    "--print",
+    "after_move:filepath",
+    "-o",
+    subtitlePath,
+    videoUrl,
+  ];
+
+  try {
+    const { stdout } = await execFileAsync("yt-dlp", args, {
+      timeout: 300_000,
+    });
+
+    // Check for downloaded subtitle files (both manual and auto-generated)
+    const files = fs.readdirSync(outputDir);
+    // Look for .vtt or .srt files (both manual and auto-generated produce these)
+    const vttFile = files.find((f) => f.startsWith("subtitles") && f.endsWith(".vtt"));
+    const srtFile = files.find((f) => f.startsWith("subtitles") && f.endsWith(".srt"));
+
+    const subtitleFile = vttFile || srtFile;
+    if (subtitleFile) {
+      const fullPath = path.join(outputDir, subtitleFile);
+      return fullPath;
+    }
+
+    return null;
+  } catch (error: unknown) {
+    // If no subtitles are available, return null instead of throwing
+    console.info("No subtitles available for this video", { videoUrl });
+    return null;
+  }
+}

@@ -13,7 +13,21 @@ interface Video {
   publishedAt?: string;
   status: string;
   source: { name: string; platform: string };
+  evaluations: Array<{
+    projectRelevance: string;
+    projectRelevanceScore: number;
+    recommendationValue: string;
+    recommendationValueScore: number;
+    exclude: boolean;
+  }>;
 }
+
+const recommendationColor: Record<string, string> = {
+  excellent: "bg-green-100 text-green-700",
+  useful: "bg-teal-100 text-teal-700",
+  limited: "bg-yellow-100 text-yellow-700",
+  unsuitable: "bg-gray-100 text-gray-500",
+};
 
 interface SourceOption {
   id: string;
@@ -165,6 +179,9 @@ function VideosContent() {
                 Status
               </th>
               <th className="px-4 py-3 text-center font-medium text-gray-600">
+                Evaluation
+              </th>
+              <th className="px-4 py-3 text-center font-medium text-gray-600">
                 Actions
               </th>
             </tr>
@@ -211,6 +228,19 @@ function VideosContent() {
                   </span>
                 </td>
                 <td className="px-4 py-2 text-center">
+                  {video.evaluations?.[0] ? (
+                    <span
+                      title={`Project relevance: ${video.evaluations[0].projectRelevance} (${video.evaluations[0].projectRelevanceScore.toFixed(2)})`}
+                      className={`rounded-full px-2 py-1 text-xs ${recommendationColor[video.evaluations[0].recommendationValue] || "bg-gray-100 text-gray-600"}`}
+                    >
+                      {video.evaluations[0].recommendationValue}
+                      {video.evaluations[0].exclude ? " ⊘" : ""}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-300">-</span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-center">
                   <button
                     onClick={() => handleProcess(video.id)}
                     disabled={processing[video.id]}
@@ -223,7 +253,7 @@ function VideosContent() {
             ))}
             {data?.videos.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   No videos found.
                 </td>
               </tr>

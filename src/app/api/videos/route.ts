@@ -28,6 +28,17 @@ export async function GET(req: NextRequest) {
       orderBy: { viewCount: "desc" },
       include: {
         source: { select: { name: true, platform: true } },
+        evaluations: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            projectRelevance: true,
+            projectRelevanceScore: true,
+            recommendationValue: true,
+            recommendationValueScore: true,
+            exclude: true,
+          },
+        },
       },
     }),
     prisma.video.count({ where }),

@@ -9,9 +9,13 @@ import {
   EXTRACTION_PROMPT_VERSION,
   extractFromTranscript,
 } from "./extraction";
+import {
+  EVALUATION_PROMPT_VERSION,
+  evaluateForRecommendation,
+} from "./evaluation";
 import { generateEmbedding } from "./embeddings";
-import { transcribeAudio } from "./transcription";
-import { discoverYouTubeVideos, downloadAudio } from "./youtube";
+import { transcribeAudio, extractTextFromSubtitles } from "./transcription";
+import { discoverYouTubeVideos, downloadAudio, downloadYouTubeSubtitles } from "./youtube";
 
 type ErrorDetails = {
   name?: string;
@@ -165,54 +169,147 @@ export async function runDownload(videoId: string): Promise<void> {
 export async function runTranscription(videoId: string): Promise<void> {
   let video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
 
-  if (!video.audioPath || !fs.existsSync(video.audioPath)) {
-    if (video.audioPath) {
-      console.info("Audio cache missing; downloading again", {
-        videoId,
-        audioPath: video.audioPath,
-      });
-    }
-    await runDownload(videoId);
-    video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
-  }
-
-  if (!video.audioPath || !fs.existsSync(video.audioPath)) {
-    throw new Error("Audio file is unavailable after download");
-  }
-
   await prisma.video.update({
     where: { id: videoId },
     data: { status: "TRANSCRIBING", errorMessage: null },
   });
 
   try {
+    let transcriptText = "";
+    let transcriptLanguage = "en";
+    let durationMs = 0;
+    let provider = "assemblyai";
+    let audioPathToClean: string | null = null;
+
+    // Try YouTube subtitles first (for YouTube videos only)
+    const source = await prisma.source.findUnique({
+      where: { id: video.sourceId },
+    });
+
+    if (source?.platform === "YOUTUBE") {
+      console.info("Attempting to fetch YouTube subtitles", { videoId });
+
+      const subtitleCacheDir = path.join(
+        process.cwd(),
+        ".cache",
+        "subtitles",
+        videoId
+      );
+
+      try {
+        const subtitlePath = await downloadYouTubeSubtitles(
+          video.url,
+          subtitleCacheDir
+        );
+
+        if (subtitlePath && fs.existsSync(subtitlePath)) {
+          console.info("YouTube subtitles found and parsed", {
+            videoId,
+            subtitlePath,
+          });
+          transcriptText = extractTextFromSubtitles(subtitlePath);
+          provider = "youtube";
+
+          // Clean up subtitle cache
+          try {
+            fs.rmSync(subtitleCacheDir, { recursive: true });
+          } catch {
+            // ignore cleanup errors
+          }
+
+          // If we got text from subtitles, skip audio download
+          if (transcriptText.trim().length > 0) {
+            await prisma.transcript.create({
+              data: {
+                videoId,
+                provider,
+                text: transcriptText,
+                language: transcriptLanguage,
+                durationMs: 0, // Subtitles don't have duration info
+              },
+            });
+
+            await prisma.costEvent.create({
+              data: {
+                videoId,
+                stage: "transcription",
+                provider,
+                inputUnits: transcriptText.length,
+                estimatedCost: 0, // No cost for YouTube subtitles
+              },
+            });
+
+            await prisma.video.update({
+              where: { id: videoId },
+              data: { status: "TRANSCRIBED", audioPath: null },
+            });
+
+            console.info("Video transcribed using YouTube subtitles", { videoId });
+            return;
+          }
+        }
+      } catch (error: unknown) {
+        console.info("YouTube subtitles not available, falling back to audio", {
+          videoId,
+          error: (error as { message?: string })?.message,
+        });
+      }
+    }
+
+    // Fallback: Download and transcribe audio
+    if (!video.audioPath || !fs.existsSync(video.audioPath)) {
+      if (video.audioPath) {
+        console.info("Audio cache missing; downloading again", {
+          videoId,
+          audioPath: video.audioPath,
+        });
+      }
+      await runDownload(videoId);
+      video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
+    }
+
+    if (!video.audioPath || !fs.existsSync(video.audioPath)) {
+      throw new Error("Audio file is unavailable after download");
+    }
+
+    audioPathToClean = video.audioPath;
+
+    console.info("Transcribing audio", { videoId, audioPath: video.audioPath });
     const result = await transcribeAudio(video.audioPath);
+
+    transcriptText = result.text;
+    transcriptLanguage = result.language;
+    durationMs = result.durationMs;
+    provider = process.env.TRANSCRIPTION_PROVIDER || "assemblyai";
 
     await prisma.transcript.create({
       data: {
         videoId,
-        provider: process.env.TRANSCRIPTION_PROVIDER || "assemblyai",
-        text: result.text,
-        language: result.language,
-        durationMs: result.durationMs,
+        provider,
+        text: transcriptText,
+        language: transcriptLanguage,
+        durationMs,
       },
     });
 
-    const estimatedCost = (result.durationMs / 3_600_000) * 0.37;
+    const estimatedCost = (durationMs / 3_600_000) * 0.37;
     await prisma.costEvent.create({
       data: {
         videoId,
         stage: "transcription",
-        provider: process.env.TRANSCRIPTION_PROVIDER || "assemblyai",
-        inputUnits: result.durationMs / 1000,
+        provider,
+        inputUnits: durationMs / 1000,
         estimatedCost,
       },
     });
 
-    try {
-      fs.unlinkSync(video.audioPath);
-    } catch {
-      // ignore cleanup errors
+    // Cleanup audio file
+    if (audioPathToClean) {
+      try {
+        fs.unlinkSync(audioPathToClean);
+      } catch {
+        // ignore cleanup errors
+      }
     }
 
     await prisma.video.update({
@@ -283,6 +380,58 @@ export async function runExtraction(videoId: string): Promise<void> {
   }
 }
 
+export async function runEvaluation(videoId: string): Promise<void> {
+  const video = await prisma.video.findUniqueOrThrow({
+    where: { id: videoId },
+    include: { transcripts: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+
+  const transcript = video.transcripts[0];
+  if (!transcript) throw new Error("No transcript found for video");
+
+  try {
+    const { result, model, inputTokens, outputTokens, estimatedCost } =
+      await evaluateForRecommendation(
+        video.title,
+        video.description || "",
+        transcript.text
+      );
+
+    await prisma.evaluation.create({
+      data: {
+        videoId,
+        model,
+        promptVersion: EVALUATION_PROMPT_VERSION,
+        projectRelevanceScore: result.projectRelevanceScore,
+        projectRelevance: result.projectRelevance,
+        relevanceTypes: result.relevanceTypes,
+        contentOrientation: result.contentOrientation,
+        targetNarratives: result.targetNarratives,
+        recommendationValueScore: result.recommendationValueScore,
+        recommendationValue: result.recommendationValue,
+        reason: result.reason,
+        exclude: result.exclude,
+        excludeReason: result.excludeReason,
+        rawJson: result as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await prisma.costEvent.create({
+      data: {
+        videoId,
+        stage: "evaluation",
+        provider: model,
+        inputUnits: inputTokens,
+        outputUnits: outputTokens,
+        estimatedCost,
+      },
+    });
+  } catch (error: unknown) {
+    logPipelineError("evaluation", videoId, error);
+    throw error;
+  }
+}
+
 export async function runEmbedding(videoId: string): Promise<void> {
   const video = await prisma.video.findUniqueOrThrow({
     where: { id: videoId },
@@ -340,5 +489,6 @@ export async function runEmbedding(videoId: string): Promise<void> {
 export async function runFullPipeline(videoId: string): Promise<void> {
   await runTranscription(videoId);
   await runExtraction(videoId);
+  await runEvaluation(videoId);
   await runEmbedding(videoId);
 }
