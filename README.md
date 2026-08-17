@@ -9,14 +9,15 @@ Source → Discover → Select top N → Download audio → Transcribe → GPT E
 ## Requirements
 
 - Node.js 18+
-- PostgreSQL with pgvector extension
+- Docker with Docker Compose
 - yt-dlp (`brew install yt-dlp` or `pip install yt-dlp`)
 
 ## Setup
 
 ```bash
+docker compose up -d
 cp .env.example .env
-# Edit .env with your DATABASE_URL and API keys
+# Edit .env with your API keys
 
 npm install
 npx prisma migrate dev --name init
@@ -24,6 +25,22 @@ npm run dev
 ```
 
 Then open http://localhost:3000
+
+The Docker service runs a local PostgreSQL 16 database with the pgvector extension.
+It is free to use and keeps its data in the `postgres_data` Docker volume.
+
+## Database management
+
+```bash
+# Stop the local database without deleting its data
+docker compose down
+
+# Delete the local database and all of its data
+docker compose down -v
+```
+
+After deleting the volume, run `docker compose up -d` and
+`npx prisma migrate dev --name init` again.
 
 ## First steps
 
@@ -35,7 +52,7 @@ Then open http://localhost:3000
 
 | Variable | Description |
 |---|---|
-| DATABASE_URL | PostgreSQL connection string |
+| DATABASE_URL | Local PostgreSQL connection string; set by `.env.example` for Docker |
 | TRANSCRIPTION_PROVIDER | `assemblyai` or `faster-whisper` |
 | ASSEMBLYAI_API_KEY | AssemblyAI API key |
 | WHISPER_ENDPOINT | Faster-Whisper/RunPod endpoint |

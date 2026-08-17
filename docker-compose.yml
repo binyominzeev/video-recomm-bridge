@@ -1,0 +1,20 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: video-recomm-bridge-db
+    environment:
+      POSTGRES_DB: video_recomm_bridge
+      POSTGRES_USER: video_recomm_bridge
+      POSTGRES_PASSWORD: video_recomm_bridge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U video_recomm_bridge -d video_recomm_bridge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
