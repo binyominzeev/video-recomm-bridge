@@ -13,6 +13,31 @@ import { generateEmbedding } from "./embeddings";
 import { transcribeAudio } from "./transcription";
 import { discoverYouTubeVideos, downloadAudio } from "./youtube";
 
+type ErrorDetails = {
+  name?: string;
+  message?: string;
+  stack?: string;
+  cause?: unknown;
+};
+
+function getErrorDetails(error: unknown) {
+  const details = error as ErrorDetails;
+  return {
+    name: details?.name || "UnknownError",
+    message: details?.message || String(error),
+    stack: details?.stack,
+    cause: details?.cause,
+  };
+}
+
+function logPipelineError(stage: string, videoId: string, error: unknown) {
+  console.error("Pipeline stage failed", {
+    stage,
+    videoId,
+    ...getErrorDetails(error),
+  });
+}
+
 function getAudioStoragePath(videoId: string): string {
   const storageDir = path.join(process.cwd(), ".cache", "audio");
   fs.mkdirSync(storageDir, { recursive: true });
@@ -116,17 +141,22 @@ export async function runDownload(videoId: string): Promise<void> {
 
   try {
     const outputPath = getAudioStoragePath(videoId);
-    await downloadAudio(video.url, outputPath);
+    const audioPath = await downloadAudio(video.url, outputPath);
+
+    if (!fs.existsSync(audioPath)) {
+      throw new Error(`yt-dlp reported an audio file that does not exist: ${audioPath}`);
+    }
 
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "DOWNLOADED", audioPath: outputPath },
+      data: { status: "DOWNLOADED", audioPath },
     });
   } catch (error: unknown) {
-    const err = error as { message?: string };
+    const { message } = getErrorDetails(error);
+    logPipelineError("download", videoId, error);
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "FAILED", errorMessage: err.message || "Unknown error" },
+      data: { status: "FAILED", errorMessage: message },
     });
     throw error;
   }
@@ -135,12 +165,20 @@ export async function runDownload(videoId: string): Promise<void> {
 export async function runTranscription(videoId: string): Promise<void> {
   let video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
 
-  if (!video.audioPath) {
+  if (!video.audioPath || !fs.existsSync(video.audioPath)) {
+    if (video.audioPath) {
+      console.info("Audio cache missing; downloading again", {
+        videoId,
+        audioPath: video.audioPath,
+      });
+    }
     await runDownload(videoId);
     video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
   }
 
-  if (!video.audioPath) throw new Error("No audio path for video");
+  if (!video.audioPath || !fs.existsSync(video.audioPath)) {
+    throw new Error("Audio file is unavailable after download");
+  }
 
   await prisma.video.update({
     where: { id: videoId },
@@ -182,10 +220,11 @@ export async function runTranscription(videoId: string): Promise<void> {
       data: { status: "TRANSCRIBED", audioPath: null },
     });
   } catch (error: unknown) {
-    const err = error as { message?: string };
+    const { message } = getErrorDetails(error);
+    logPipelineError("transcription", videoId, error);
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "FAILED", errorMessage: err.message || "Unknown error" },
+      data: { status: "FAILED", errorMessage: message },
     });
     throw error;
   }
@@ -234,10 +273,11 @@ export async function runExtraction(videoId: string): Promise<void> {
       data: { status: "EXTRACTED" },
     });
   } catch (error: unknown) {
-    const err = error as { message?: string };
+    const { message } = getErrorDetails(error);
+    logPipelineError("extraction", videoId, error);
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "FAILED", errorMessage: err.message || "Unknown error" },
+      data: { status: "FAILED", errorMessage: message },
     });
     throw error;
   }
@@ -287,10 +327,11 @@ export async function runEmbedding(videoId: string): Promise<void> {
       data: { errorMessage: null },
     });
   } catch (error: unknown) {
-    const err = error as { message?: string };
+    const { message } = getErrorDetails(error);
+    logPipelineError("embedding", videoId, error);
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "FAILED", errorMessage: err.message || "Unknown error" },
+      data: { status: "FAILED", errorMessage: message },
     });
     throw error;
   }

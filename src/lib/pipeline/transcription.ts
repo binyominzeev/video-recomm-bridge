@@ -58,13 +58,25 @@ async function transcribeWithFasterWhisper(
   const formData = new FormData();
   formData.append("audio", blob, "audio.mp3");
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    body: formData,
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      body: formData,
+    });
+  } catch (error: unknown) {
+    const details = error as { message?: string; cause?: unknown };
+    throw new Error(
+      `Whisper request failed (endpoint: ${new URL(endpoint).origin}, audioBytes: ${audioBuffer.byteLength}): ${details.message || String(error)}`,
+      { cause: details.cause || error }
+    );
+  }
 
   if (!response.ok) {
-    throw new Error(`Whisper endpoint error: ${response.statusText}`);
+    const responseBody = await response.text();
+    throw new Error(
+      `Whisper endpoint error (${response.status} ${response.statusText}, endpoint: ${new URL(endpoint).origin}): ${responseBody.slice(0, 1_000)}`
+    );
   }
 
   const data = (await response.json()) as {

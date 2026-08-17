@@ -15,6 +15,12 @@ interface Video {
   source: { name: string; platform: string };
 }
 
+interface SourceOption {
+  id: string;
+  name: string;
+  platform: string;
+}
+
 const STATUS_OPTIONS = [
   "ALL",
   "DISCOVERED",
@@ -52,6 +58,7 @@ function VideosContent() {
     pages: number;
   } | null>(null);
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
+  const [sources, setSources] = useState<SourceOption[]>([]);
 
   const buildUrl = (overrides: Record<string, string>) => {
     const params = new URLSearchParams();
@@ -82,6 +89,12 @@ function VideosContent() {
       .then(setData);
   }, [page, sourceId, statusFilter]);
 
+  useEffect(() => {
+    fetch("/api/sources")
+      .then((response) => response.json())
+      .then((result: SourceOption[]) => setSources(result));
+  }, []);
+
   const handleProcess = async (videoId: string) => {
     setProcessing((current) => ({ ...current, [videoId]: true }));
     await fetch(`/api/videos/${videoId}/process`, {
@@ -99,6 +112,21 @@ function VideosContent() {
       <h1 className="mb-6 text-2xl font-bold text-gray-800">Videos</h1>
 
       <div className="mb-4 flex flex-wrap gap-3">
+        <select
+          value={sourceId}
+          onChange={(e) =>
+            router.push(buildUrl({ sourceId: e.target.value, page: "1" }))
+          }
+          className="rounded border px-3 py-2 text-sm"
+          aria-label="Filter by source"
+        >
+          <option value="">All sources</option>
+          {sources.map((source) => (
+            <option key={source.id} value={source.id}>
+              {source.name} ({source.platform})
+            </option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) =>

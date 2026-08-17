@@ -1,4 +1,6 @@
 import { execFile } from "child_process";
+import fs from "fs";
+import path from "path";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -82,7 +84,7 @@ export async function discoverYouTubeVideos(
 export async function downloadAudio(
   videoUrl: string,
   outputPath: string
-): Promise<void> {
+): Promise<string> {
   const args = [
     "-x",
     "--audio-format",
@@ -91,10 +93,46 @@ export async function downloadAudio(
     "5",
     "--no-playlist",
     "--no-warnings",
+    "--print",
+    "after_move:filepath",
     "-o",
     outputPath,
     videoUrl,
   ];
 
-  await execFileAsync("yt-dlp", args, { timeout: 300_000 });
+  try {
+    const { stdout } = await execFileAsync("yt-dlp", args, {
+      timeout: 300_000,
+    });
+    const reportedPaths = stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .reverse();
+    const outputDir = path.dirname(outputPath);
+    const outputName = path.basename(outputPath, path.extname(outputPath));
+    const generatedPaths = fs
+      .readdirSync(outputDir)
+      .filter((name) => name.startsWith(`${outputName}.`))
+      .map((name) => path.join(outputDir, name));
+    const audioPath = [...reportedPaths, outputPath, ...generatedPaths].find(
+      (candidate) => fs.existsSync(candidate)
+    );
+
+    if (!audioPath) {
+      throw new Error(
+        `yt-dlp completed but no audio file was created for ${outputPath}`
+      );
+    }
+
+    return audioPath;
+  } catch (error: unknown) {
+    const details = error as { message?: string; stderr?: string };
+    const stderr = details.stderr?.trim().slice(-2_000);
+    throw new Error(
+      `yt-dlp audio download failed: ${details.message || String(error)}${stderr ? `\nstderr: ${stderr}` : ""}`,
+      { cause: error }
+    );
+  }
 }

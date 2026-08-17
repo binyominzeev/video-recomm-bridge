@@ -47,33 +47,89 @@ interface VideoDetail {
   }>;
 }
 
+const COMPLETED_STATUS_BY_STAGE: Record<string, string> = {
+  full: "EXTRACTED",
+  transcribe: "TRANSCRIBED",
+  extract: "EXTRACTED",
+  embed: "EXTRACTED",
+};
+
 export default function VideoDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [video, setVideo] = useState<VideoDetail | null>(null);
   const [running, setRunning] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
-  const fetchVideo = useCallback(() =>
-    fetch(`/api/videos/${id}`)
-      .then((r) => r.json())
-      .then(setVideo),
-  [id]);
+  const fetchVideo = useCallback(async () => {
+    const response = await fetch(`/api/videos/${id}`);
+    if (!response.ok) {
+      throw new Error(`Could not refresh video status (${response.status})`);
+    }
+
+    const nextVideo = (await response.json()) as VideoDetail;
+    setVideo(nextVideo);
+    return nextVideo;
+  }, [id]);
 
   useEffect(() => {
     void fetchVideo();
   }, [fetchVideo]);
 
+  useEffect(() => {
+    if (!running) return;
+
+    let cancelled = false;
+    let timeoutId: number | undefined;
+
+    const pollStatus = async () => {
+      try {
+        const nextVideo = await fetchVideo();
+        if (cancelled) return;
+
+        if (
+          nextVideo.status === "FAILED" ||
+          nextVideo.status === COMPLETED_STATUS_BY_STAGE[running]
+        ) {
+          setRunning(null);
+          return;
+        }
+
+        timeoutId = window.setTimeout(pollStatus, 1000);
+      } catch (error: unknown) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Could not refresh video status";
+          setRequestError(message);
+          setRunning(null);
+        }
+      }
+    };
+
+    void pollStatus();
+    return () => {
+      cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [fetchVideo, running]);
+
   const runStage = async (stage: string) => {
     setRunning(stage);
-    await fetch(`/api/videos/${id}/process`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage }),
-    });
-    setTimeout(() => {
+    setRequestError(null);
+
+    try {
+      const response = await fetch(`/api/videos/${id}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage }),
+      });
+      if (!response.ok) {
+        throw new Error(`Could not start processing (${response.status})`);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not start processing";
+      setRequestError(message);
       setRunning(null);
-      void fetchVideo();
-    }, 3000);
+    }
   };
 
   if (!video) return <div className="text-gray-500">Loading...</div>;
@@ -156,6 +212,14 @@ export default function VideoDetailPage() {
           </span>
           {video.errorMessage && (
             <span className="text-xs text-red-500">{video.errorMessage}</span>
+          )}
+          {running && (
+            <span className="text-xs text-gray-500">
+              Processing: {video.status.toLowerCase()}...
+            </span>
+          )}
+          {requestError && (
+            <span className="text-xs text-red-500">{requestError}</span>
           )}
         </div>
 

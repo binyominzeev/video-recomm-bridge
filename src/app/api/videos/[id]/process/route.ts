@@ -9,6 +9,23 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function logBackgroundFailure(stage: string, videoId: string, error: unknown) {
+  const details = error as {
+    name?: string;
+    message?: string;
+    stack?: string;
+    cause?: unknown;
+  };
+  console.error("Video processing failed", {
+    stage,
+    videoId,
+    name: details?.name || "UnknownError",
+    message: details?.message || String(error),
+    stack: details?.stack,
+    cause: details?.cause,
+  });
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -17,13 +34,21 @@ export async function POST(
   const stage = body.stage || "full";
 
   if (stage === "transcribe") {
-    void runTranscription(params.id).catch(console.error);
+    void runTranscription(params.id).catch((error) =>
+      logBackgroundFailure(stage, params.id, error)
+    );
   } else if (stage === "extract") {
-    void runExtraction(params.id).catch(console.error);
+    void runExtraction(params.id).catch((error) =>
+      logBackgroundFailure(stage, params.id, error)
+    );
   } else if (stage === "embed") {
-    void runEmbedding(params.id).catch(console.error);
+    void runEmbedding(params.id).catch((error) =>
+      logBackgroundFailure(stage, params.id, error)
+    );
   } else {
-    void runFullPipeline(params.id).catch(console.error);
+    void runFullPipeline(params.id).catch((error) =>
+      logBackgroundFailure(stage, params.id, error)
+    );
   }
 
   return NextResponse.json({ message: `Processing started: ${stage}` });
