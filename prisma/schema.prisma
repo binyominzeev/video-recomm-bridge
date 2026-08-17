@@ -35,6 +35,31 @@ enum VideoStatus {
   SKIPPED
 }
 
+enum BatchStatus {
+  DRAFT
+  ESTIMATED
+  APPROVED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BatchItemStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum CostEventKind {
+  ACTUAL
+  ESTIMATE
+}
+
 model Source {
   id                  String       @id @default(cuid())
   url                 String       @unique
@@ -69,9 +94,47 @@ model Video {
   extractions  Extraction[]
   evaluations  Evaluation[]
   costEvents   CostEvent[]
+  batchItems   BatchItem[]
   embedding    Unsupported("vector(1536)")?
 
   @@unique([sourceId, externalId])
+}
+
+model Batch {
+  id                 String      @id @default(cuid())
+  status             BatchStatus @default(DRAFT)
+  requestedStages    String[]
+  providerConfig     Json
+  estimateSnapshot   Json?
+  pricingVersion     String?
+  currency           String      @default("USD")
+  budgetLimit        Float?
+  approvedAt         DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  items              BatchItem[]
+  costEvents         CostEvent[]
+}
+
+model BatchItem {
+  id           String          @id @default(cuid())
+  batchId      String
+  batch        Batch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  videoId      String
+  video        Video           @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  status       BatchItemStatus @default(QUEUED)
+  currentStage String?
+  attemptCount Int             @default(0)
+  lastError    String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([batchId, videoId])
+  @@index([batchId, status])
 }
 
 model Transcript {
@@ -116,13 +179,21 @@ model Evaluation {
 }
 
 model CostEvent {
-  id            String   @id @default(cuid())
-  videoId       String?
-  video         Video?   @relation(fields: [videoId], references: [id])
-  stage         String
-  provider      String
-  inputUnits    Float?
-  outputUnits   Float?
-  estimatedCost Float
-  createdAt     DateTime @default(now())
+  id              String         @id @default(cuid())
+  videoId         String?
+  video           Video?         @relation(fields: [videoId], references: [id])
+  batchId         String?
+  batch           Batch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  stage           String
+  provider        String
+  kind            CostEventKind  @default(ACTUAL)
+  currency        String         @default("USD")
+  pricingVersion  String?
+  idempotencyKey  String?        @unique
+  inputUnits      Float?
+  outputUnits     Float?
+  estimatedCost   Float
+  createdAt       DateTime       @default(now())
+
+  @@index([batchId, kind])
 }
