@@ -28,12 +28,58 @@ export async function GET() {
         select: { videos: true },
       },
       videos: {
-        select: { status: true },
+        select: {
+          status: true,
+          transcripts: { select: { id: true }, take: 1 },
+          extractions: { select: { id: true }, take: 1 },
+          evaluations: { select: { id: true }, take: 1 },
+          costEvents: {
+            where: { kind: "ACTUAL", stage: "embedding" },
+            select: { id: true },
+            take: 1,
+          },
+        },
       },
     },
   });
 
-  return NextResponse.json(sources);
+  return NextResponse.json(
+    sources.map((source) => {
+      const incomplete = {
+        transcription: 0,
+        extraction: 0,
+        evaluation: 0,
+        embedding: 0,
+      };
+
+      let fullyProcessed = 0;
+
+      for (const video of source.videos) {
+        const hasTranscription = video.transcripts.length > 0;
+        const hasExtraction = video.extractions.length > 0;
+        const hasEvaluation = video.evaluations.length > 0;
+        const hasEmbedding = video.costEvents.length > 0;
+
+        if (!hasTranscription) incomplete.transcription += 1;
+        if (!hasExtraction) incomplete.extraction += 1;
+        if (!hasEvaluation) incomplete.evaluation += 1;
+        if (!hasEmbedding) incomplete.embedding += 1;
+
+        if (hasTranscription && hasExtraction && hasEvaluation && hasEmbedding) {
+          fullyProcessed += 1;
+        }
+      }
+
+      return {
+        ...source,
+        processingSummary: {
+          totalVideos: source.videos.length,
+          fullyProcessed,
+          incomplete,
+        },
+      };
+    })
+  );
 }
 
 export async function POST(req: NextRequest) {

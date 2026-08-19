@@ -1,7 +1,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: video-recomm-bridge-db
+    container_name: videobridge-db
     environment:
       POSTGRES_DB: video_recomm_bridge
       POSTGRES_USER: video_recomm_bridge
@@ -18,3 +18,5 @@ services:
 
 volumes:
   postgres_data:
+    name: video-recomm-bridge_postgres_data
+    external: true

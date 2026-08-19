@@ -11,6 +11,59 @@ const allowedStages = new Set<EstimateStage>([
   "embedding",
 ]);
 
+export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl;
+  const page = Number.parseInt(searchParams.get("page") || "1", 10);
+  const limit = Math.min(
+    50,
+    Math.max(1, Number.parseInt(searchParams.get("limit") || "20", 10))
+  );
+  const skip = (page - 1) * limit;
+
+  const [batches, total] = await Promise.all([
+    prisma.batch.findMany({
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      include: {
+        items: {
+          select: { status: true },
+        },
+        costEvents: {
+          where: { kind: "ACTUAL" },
+          select: { estimatedCost: true },
+        },
+      },
+    }),
+    prisma.batch.count(),
+  ]);
+
+  return NextResponse.json({
+    batches: batches.map((batch) => {
+      const progress = batch.items.reduce(
+        (result, item) => {
+          result[item.status] = (result[item.status] || 0) + 1;
+          return result;
+        },
+        {} as Record<string, number>
+      );
+      const actualCost = batch.costEvents.reduce(
+        (sum, event) => sum + event.estimatedCost,
+        0
+      );
+
+      return {
+        ...batch,
+        progress,
+        actualCost,
+      };
+    }),
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+  });
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     videoIds?: string[];

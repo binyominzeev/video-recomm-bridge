@@ -13,9 +13,18 @@ import {
   EVALUATION_PROMPT_VERSION,
   evaluateForRecommendation,
 } from "./evaluation";
+import { CURRENCY, PRICING_VERSION } from "./pricing";
 import { generateEmbedding } from "./embeddings";
 import { transcribeAudio, extractTextFromSubtitles } from "./transcription";
 import { discoverYouTubeVideos, downloadAudio, downloadYouTubeSubtitles } from "./youtube";
+
+type StageName = "transcription" | "extraction" | "evaluation" | "embedding";
+
+type PipelineRunContext = {
+  batchId?: string;
+};
+
+type StageCompletion = Record<StageName, boolean>;
 
 type ErrorDetails = {
   name?: string;
@@ -166,7 +175,7 @@ export async function runDownload(videoId: string): Promise<void> {
   }
 }
 
-export async function runTranscription(videoId: string): Promise<void> {
+export async function runTranscription(videoId: string, context?: PipelineRunContext): Promise<void> {
   let video = await prisma.video.findUniqueOrThrow({ where: { id: videoId } });
 
   await prisma.video.update({
@@ -232,8 +241,12 @@ export async function runTranscription(videoId: string): Promise<void> {
             await prisma.costEvent.create({
               data: {
                 videoId,
+                ...(context?.batchId ? { batchId: context.batchId } : {}),
                 stage: "transcription",
                 provider,
+                kind: "ACTUAL",
+                currency: CURRENCY,
+                pricingVersion: PRICING_VERSION,
                 inputUnits: transcriptText.length,
                 estimatedCost: 0, // No cost for YouTube subtitles
               },
@@ -296,8 +309,12 @@ export async function runTranscription(videoId: string): Promise<void> {
     await prisma.costEvent.create({
       data: {
         videoId,
+        ...(context?.batchId ? { batchId: context.batchId } : {}),
         stage: "transcription",
         provider,
+        kind: "ACTUAL",
+        currency: CURRENCY,
+        pricingVersion: PRICING_VERSION,
         inputUnits: durationMs / 1000,
         estimatedCost,
       },
@@ -327,7 +344,7 @@ export async function runTranscription(videoId: string): Promise<void> {
   }
 }
 
-export async function runExtraction(videoId: string): Promise<void> {
+export async function runExtraction(videoId: string, context?: PipelineRunContext): Promise<void> {
   const video = await prisma.video.findUniqueOrThrow({
     where: { id: videoId },
     include: { transcripts: { orderBy: { createdAt: "desc" }, take: 1 } },
@@ -357,8 +374,12 @@ export async function runExtraction(videoId: string): Promise<void> {
     await prisma.costEvent.create({
       data: {
         videoId,
+        ...(context?.batchId ? { batchId: context.batchId } : {}),
         stage: "extraction",
         provider: model,
+        kind: "ACTUAL",
+        currency: CURRENCY,
+        pricingVersion: PRICING_VERSION,
         inputUnits: inputTokens,
         outputUnits: outputTokens,
         estimatedCost,
@@ -380,7 +401,7 @@ export async function runExtraction(videoId: string): Promise<void> {
   }
 }
 
-export async function runEvaluation(videoId: string): Promise<void> {
+export async function runEvaluation(videoId: string, context?: PipelineRunContext): Promise<void> {
   const video = await prisma.video.findUniqueOrThrow({
     where: { id: videoId },
     include: { transcripts: { orderBy: { createdAt: "desc" }, take: 1 } },
@@ -419,8 +440,12 @@ export async function runEvaluation(videoId: string): Promise<void> {
     await prisma.costEvent.create({
       data: {
         videoId,
+        ...(context?.batchId ? { batchId: context.batchId } : {}),
         stage: "evaluation",
         provider: model,
+        kind: "ACTUAL",
+        currency: CURRENCY,
+        pricingVersion: PRICING_VERSION,
         inputUnits: inputTokens,
         outputUnits: outputTokens,
         estimatedCost,
@@ -432,7 +457,7 @@ export async function runEvaluation(videoId: string): Promise<void> {
   }
 }
 
-export async function runEmbedding(videoId: string): Promise<void> {
+export async function runEmbedding(videoId: string, context?: PipelineRunContext): Promise<void> {
   const video = await prisma.video.findUniqueOrThrow({
     where: { id: videoId },
     include: {
@@ -464,8 +489,12 @@ export async function runEmbedding(videoId: string): Promise<void> {
     await prisma.costEvent.create({
       data: {
         videoId,
+        ...(context?.batchId ? { batchId: context.batchId } : {}),
         stage: "embedding",
         provider: "openai",
+        kind: "ACTUAL",
+        currency: CURRENCY,
+        pricingVersion: PRICING_VERSION,
         inputUnits: textToEmbed.length / 4,
         estimatedCost,
       },
@@ -491,4 +520,186 @@ export async function runFullPipeline(videoId: string): Promise<void> {
   await runExtraction(videoId);
   await runEvaluation(videoId);
   await runEmbedding(videoId);
+}
+
+async function runStageForVideo(
+  stage: StageName,
+  videoId: string,
+  context: PipelineRunContext
+) {
+  if (stage === "transcription") {
+    await runTranscription(videoId, context);
+    return;
+  }
+  if (stage === "extraction") {
+    await runExtraction(videoId, context);
+    return;
+  }
+  if (stage === "evaluation") {
+    await runEvaluation(videoId, context);
+    return;
+  }
+  await runEmbedding(videoId, context);
+}
+
+function parseRequestedStages(stages: string[]): StageName[] {
+  return stages.filter(
+    (stage): stage is StageName =>
+      stage === "transcription" ||
+      stage === "extraction" ||
+      stage === "evaluation" ||
+      stage === "embedding"
+  );
+}
+
+async function getStageCompletion(videoId: string): Promise<StageCompletion> {
+  const video = await prisma.video.findUniqueOrThrow({
+    where: { id: videoId },
+    include: {
+      transcripts: { select: { id: true }, take: 1 },
+      extractions: { select: { id: true }, take: 1 },
+      evaluations: { select: { id: true }, take: 1 },
+      costEvents: {
+        where: { stage: "embedding", kind: "ACTUAL" },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+
+  return {
+    transcription: video.transcripts.length > 0,
+    extraction: video.extractions.length > 0,
+    evaluation: video.evaluations.length > 0,
+    embedding: video.costEvents.length > 0,
+  };
+}
+
+function ensureStageDependencies(stage: StageName, completion: StageCompletion) {
+  if (stage === "extraction" && !completion.transcription) {
+    throw new Error("Extraction requires transcription. Include transcription stage or transcribe first.");
+  }
+
+  if (stage === "evaluation" && !completion.transcription) {
+    throw new Error("Evaluation requires transcription. Include transcription stage or transcribe first.");
+  }
+}
+
+export async function runBatch(batchId: string): Promise<void> {
+  const claim = await prisma.batch.updateMany({
+    where: { id: batchId, status: { in: ["APPROVED", "PAUSED"] } },
+    data: {
+      status: "RUNNING",
+      startedAt: new Date(),
+      completedAt: null,
+    },
+  });
+
+  if (claim.count === 0) {
+    throw new Error("Batch is not in an executable state (APPROVED or PAUSED)");
+  }
+
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    include: {
+      items: {
+        where: { status: { in: ["QUEUED", "FAILED"] } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!batch) {
+    throw new Error("Batch not found");
+  }
+
+  const stages = parseRequestedStages(batch.requestedStages);
+  if (stages.length === 0) {
+    await prisma.batch.update({
+      where: { id: batchId },
+      data: { status: "FAILED", completedAt: new Date() },
+    });
+    throw new Error("Batch has no valid requested stages");
+  }
+
+  let hasFailures = false;
+
+  for (const item of batch.items) {
+    const currentBatch = await prisma.batch.findUnique({
+      where: { id: batchId },
+      select: { status: true },
+    });
+
+    if (currentBatch?.status === "CANCELLED") {
+      break;
+    }
+
+    await prisma.batchItem.update({
+      where: { id: item.id },
+      data: {
+        status: "RUNNING",
+        currentStage: stages[0],
+        startedAt: item.startedAt ?? new Date(),
+        lastError: null,
+      },
+    });
+
+    try {
+      const completion = await getStageCompletion(item.videoId);
+
+      for (const stage of stages) {
+        if (completion[stage]) {
+          continue;
+        }
+
+        ensureStageDependencies(stage, completion);
+
+        await prisma.batchItem.update({
+          where: { id: item.id },
+          data: { currentStage: stage },
+        });
+
+        await runStageForVideo(stage, item.videoId, { batchId });
+        completion[stage] = true;
+      }
+
+      await prisma.batchItem.update({
+        where: { id: item.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          currentStage: null,
+        },
+      });
+    } catch (error: unknown) {
+      hasFailures = true;
+      const details = getErrorDetails(error);
+      await prisma.batchItem.update({
+        where: { id: item.id },
+        data: {
+          status: "FAILED",
+          currentStage: null,
+          attemptCount: { increment: 1 },
+          lastError: details.message,
+        },
+      });
+    }
+  }
+
+  const refreshed = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: { status: true },
+  });
+
+  if (refreshed?.status === "CANCELLED") {
+    return;
+  }
+
+  await prisma.batch.update({
+    where: { id: batchId },
+    data: {
+      status: hasFailures ? "FAILED" : "COMPLETED",
+      completedAt: new Date(),
+    },
+  });
 }

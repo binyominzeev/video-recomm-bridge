@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
       orderBy: { viewCount: "desc" },
       include: {
         source: { select: { name: true, platform: true } },
+        transcripts: { select: { id: true }, take: 1 },
+        extractions: { select: { id: true }, take: 1 },
         evaluations: {
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -39,6 +41,11 @@ export async function GET(req: NextRequest) {
             exclude: true,
           },
         },
+        costEvents: {
+          where: { kind: "ACTUAL", stage: "embedding" },
+          select: { id: true },
+          take: 1,
+        },
       },
     }),
     prisma.video.count({ where }),
@@ -48,6 +55,24 @@ export async function GET(req: NextRequest) {
     videos: videos.map((video) => ({
       ...video,
       viewCount: video.viewCount?.toString(),
+      processing: {
+        hasTranscription: video.transcripts.length > 0,
+        hasExtraction: video.extractions.length > 0,
+        hasEvaluation: video.evaluations.length > 0,
+        hasEmbedding: video.costEvents.length > 0,
+        completionState:
+          video.transcripts.length === 0 &&
+          video.extractions.length === 0 &&
+          video.evaluations.length === 0 &&
+          video.costEvents.length === 0
+            ? "unprocessed"
+            : video.transcripts.length > 0 &&
+                video.extractions.length > 0 &&
+                video.evaluations.length > 0 &&
+                video.costEvents.length > 0
+              ? "complete"
+              : "partial",
+      },
     })),
     total,
     page,
