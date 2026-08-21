@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 videobridge_prod.dump
+videobridge_local.dump
 
 # debug
 npm-debug.log*
