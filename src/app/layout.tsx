@@ -32,6 +32,9 @@ export default function RootLayout({
               <Link href="/batches" className="text-sm hover:text-gray-300">
                 Batches
               </Link>
+              <Link href="/claims" className="text-sm hover:text-gray-300">
+                Claims
+              </Link>
               <Link href="/search" className="text-sm hover:text-gray-300">
                 Search
               </Link>

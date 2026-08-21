@@ -102,6 +102,9 @@ export default function BatchesPage() {
     partial: true,
     complete: false,
   });
+  const [videoPage, setVideoPage] = useState(1);
+  const [videoTotal, setVideoTotal] = useState(0);
+  const [videoPages, setVideoPages] = useState(0);
   const [showProcessedSources, setShowProcessedSources] = useState(false);
   const [stages, setStages] = useState<EstimateStage[]>([...STAGES]);
   const [transcriptionProvider, setTranscriptionProvider] = useState<
@@ -120,13 +123,6 @@ export default function BatchesPage() {
     if (selectedVideoIds.length === 1) return "1 video selected";
     return `${selectedVideoIds.length} videos selected`;
   }, [selectedVideoIds.length]);
-
-  const filteredVideos = useMemo(() => {
-    return videos.filter((video) => {
-      const state = video.processing?.completionState || "unprocessed";
-      return completionFilters[state];
-    });
-  }, [completionFilters, videos]);
 
   const visibleSources = useMemo(() => {
     if (showProcessedSources) {
@@ -150,16 +146,29 @@ export default function BatchesPage() {
   }, []);
 
   const loadVideos = useCallback(async () => {
+    const selectedStates = (Object.keys(completionFilters) as Array<keyof typeof completionFilters>).filter(
+      (key) => completionFilters[key]
+    );
+
     const params = new URLSearchParams();
     if (sourceId) params.set("sourceId", sourceId);
     if (statusFilter !== "ALL") params.set("status", statusFilter);
-    params.set("page", "1");
+    if (selectedStates.length > 0 && selectedStates.length < 3) {
+      params.set("completionState", selectedStates.join(","));
+    }
+    params.set("page", String(videoPage));
     params.set("limit", "100");
 
     const response = await fetch(`/api/videos?${params.toString()}`);
-    const data = (await response.json()) as { videos: VideoOption[] };
+    const data = (await response.json()) as {
+      videos: VideoOption[];
+      total: number;
+      pages: number;
+    };
     setVideos(data.videos);
-  }, [sourceId, statusFilter]);
+    setVideoTotal(data.total);
+    setVideoPages(data.pages);
+  }, [completionFilters, sourceId, statusFilter, videoPage]);
 
   const loadBatches = useCallback(async () => {
     const response = await fetch("/api/batches?limit=20&page=1");
@@ -174,6 +183,10 @@ export default function BatchesPage() {
   useEffect(() => {
     void loadVideos();
   }, [loadVideos]);
+
+  useEffect(() => {
+    setVideoPage(1);
+  }, [sourceId, statusFilter, completionFilters]);
 
   useEffect(() => {
     if (!sourceId) {
@@ -203,7 +216,7 @@ export default function BatchesPage() {
   };
 
   const toggleAllVisible = () => {
-    const visibleIds = filteredVideos.map((video) => video.id);
+    const visibleIds = videos.map((video) => video.id);
     const allSelected = visibleIds.every((id) => selectedVideoIds.includes(id));
 
     if (allSelected) {
@@ -443,7 +456,7 @@ export default function BatchesPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredVideos.map((video) => (
+              {videos.map((video) => (
                 <tr key={video.id} className="border-b last:border-b-0 hover:bg-gray-50">
                   <td className="px-3 py-2 text-center">
                     <input
@@ -460,7 +473,7 @@ export default function BatchesPage() {
                   </td>
                 </tr>
               ))}
-              {filteredVideos.length === 0 && (
+              {videos.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-gray-400">
                     No videos for the selected status/state filters.
@@ -470,6 +483,30 @@ export default function BatchesPage() {
             </tbody>
           </table>
         </div>
+
+        {videoPages > 1 && (
+          <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+            <span>
+              Page {videoPage} of {videoPages} ({videoTotal} videos match the current filters)
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setVideoPage((current) => Math.max(1, current - 1))}
+                disabled={videoPage <= 1}
+                className="rounded border border-gray-300 bg-white px-3 py-1 hover:bg-gray-50 disabled:opacity-50"
+              >
+                ← Prev
+              </button>
+              <button
+                onClick={() => setVideoPage((current) => Math.min(videoPages, current + 1))}
+                disabled={videoPage >= videoPages}
+                className="rounded border border-gray-300 bg-white px-3 py-1 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mb-4 text-sm text-gray-600">{selectedCountText}</div>
 

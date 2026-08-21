@@ -74,9 +74,9 @@ model Source {
 }
 
 model Video {
-  id           String               @id @default(cuid())
+  id           String                       @id @default(cuid())
   sourceId     String
-  source       Source               @relation(fields: [sourceId], references: [id])
+  source       Source                       @relation(fields: [sourceId], references: [id])
   externalId   String
   url          String
   title        String
@@ -85,11 +85,11 @@ model Video {
   publishedAt  DateTime?
   duration     Int?
   viewCount    BigInt?
-  status       VideoStatus          @default(DISCOVERED)
+  status       VideoStatus                  @default(DISCOVERED)
   errorMessage String?
   audioPath    String?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
   transcripts  Transcript[]
   extractions  Extraction[]
   evaluations  Evaluation[]
@@ -101,21 +101,21 @@ model Video {
 }
 
 model Batch {
-  id                 String      @id @default(cuid())
-  status             BatchStatus @default(DRAFT)
-  requestedStages    String[]
-  providerConfig     Json
-  estimateSnapshot   Json?
-  pricingVersion     String?
-  currency           String      @default("USD")
-  budgetLimit        Float?
-  approvedAt         DateTime?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  items              BatchItem[]
-  costEvents         CostEvent[]
+  id               String      @id @default(cuid())
+  status           BatchStatus @default(DRAFT)
+  requestedStages  String[]
+  providerConfig   Json
+  estimateSnapshot Json?
+  pricingVersion   String?
+  currency         String      @default("USD")
+  budgetLimit      Float?
+  approvedAt       DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  items            BatchItem[]
+  costEvents       CostEvent[]
 }
 
 model BatchItem {
@@ -179,21 +179,21 @@ model Evaluation {
 }
 
 model CostEvent {
-  id              String         @id @default(cuid())
-  videoId         String?
-  video           Video?         @relation(fields: [videoId], references: [id])
-  batchId         String?
-  batch           Batch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  stage           String
-  provider        String
-  kind            CostEventKind  @default(ACTUAL)
-  currency        String         @default("USD")
-  pricingVersion  String?
-  idempotencyKey  String?        @unique
-  inputUnits      Float?
-  outputUnits     Float?
-  estimatedCost   Float
-  createdAt       DateTime       @default(now())
+  id             String        @id @default(cuid())
+  videoId        String?
+  video          Video?        @relation(fields: [videoId], references: [id])
+  batchId        String?
+  batch          Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  stage          String
+  provider       String
+  kind           CostEventKind @default(ACTUAL)
+  currency       String        @default("USD")
+  pricingVersion String?
+  idempotencyKey String?       @unique
+  inputUnits     Float?
+  outputUnits    Float?
+  estimatedCost  Float
+  createdAt      DateTime      @default(now())
 
   @@index([batchId, kind])
 }

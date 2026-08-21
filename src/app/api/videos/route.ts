@@ -1,24 +1,59 @@
-import { VideoStatus } from "@prisma/client";
+import { Prisma, VideoStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+type CompletionState = "unprocessed" | "partial" | "complete";
+
+const EMBEDDING_COST_EVENT_FILTER = { stage: "embedding", kind: "ACTUAL" as const };
+
+const UNPROCESSED_WHERE: Prisma.VideoWhereInput = {
+  transcripts: { none: {} },
+  extractions: { none: {} },
+  evaluations: { none: {} },
+  costEvents: { none: EMBEDDING_COST_EVENT_FILTER },
+};
+
+const COMPLETE_WHERE: Prisma.VideoWhereInput = {
+  transcripts: { some: {} },
+  extractions: { some: {} },
+  evaluations: { some: {} },
+  costEvents: { some: EMBEDDING_COST_EVENT_FILTER },
+};
+
+// Partial = anything that is neither fully unprocessed nor fully complete.
+const PARTIAL_WHERE: Prisma.VideoWhereInput = {
+  NOT: [UNPROCESSED_WHERE, COMPLETE_WHERE],
+};
+
+const COMPLETION_WHERE_BY_STATE: Record<CompletionState, Prisma.VideoWhereInput> = {
+  unprocessed: UNPROCESSED_WHERE,
+  partial: PARTIAL_WHERE,
+  complete: COMPLETE_WHERE,
+};
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const sourceId = searchParams.get("sourceId") || undefined;
   const status = searchParams.get("status") as VideoStatus | null;
+  const completionStates = (searchParams.get("completionState") || "")
+    .split(",")
+    .filter((value): value is CompletionState =>
+      value === "unprocessed" || value === "partial" || value === "complete"
+    );
   const page = Number.parseInt(searchParams.get("page") || "1", 10);
   const limit = Number.parseInt(searchParams.get("limit") || "20", 10);
   const skip = (page - 1) * limit;
 
-  const where: {
-    sourceId?: string;
-    status?: VideoStatus;
-  } = {};
+  const where: Prisma.VideoWhereInput = {};
 
   if (sourceId) where.sourceId = sourceId;
   if (status) where.status = status;
+  if (completionStates.length > 0) {
+    where.OR = completionStates.map((state) => COMPLETION_WHERE_BY_STATE[state]);
+  }
 
   const [videos, total] = await Promise.all([
     prisma.video.findMany({
