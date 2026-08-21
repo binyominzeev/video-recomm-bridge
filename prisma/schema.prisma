@@ -60,6 +60,12 @@ enum CostEventKind {
   ESTIMATE
 }
 
+enum ClaimGroupingRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model Source {
   id                  String       @id @default(cuid())
   url                 String       @unique
@@ -74,28 +80,30 @@ model Source {
 }
 
 model Video {
-  id           String                       @id @default(cuid())
-  sourceId     String
-  source       Source                       @relation(fields: [sourceId], references: [id])
-  externalId   String
-  url          String
-  title        String
-  description  String?
-  thumbnail    String?
-  publishedAt  DateTime?
-  duration     Int?
-  viewCount    BigInt?
-  status       VideoStatus                  @default(DISCOVERED)
-  errorMessage String?
-  audioPath    String?
-  createdAt    DateTime                     @default(now())
-  updatedAt    DateTime                     @updatedAt
-  transcripts  Transcript[]
-  extractions  Extraction[]
-  evaluations  Evaluation[]
-  costEvents   CostEvent[]
-  batchItems   BatchItem[]
-  embedding    Unsupported("vector(1536)")?
+  id             String                       @id @default(cuid())
+  sourceId       String
+  source         Source                       @relation(fields: [sourceId], references: [id])
+  externalId     String
+  url            String
+  title          String
+  description    String?
+  thumbnail      String?
+  publishedAt    DateTime?
+  duration       Int?
+  viewCount      BigInt?
+  status         VideoStatus                  @default(DISCOVERED)
+  errorMessage   String?
+  audioPath      String?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+  transcripts    Transcript[]
+  extractions    Extraction[]
+  evaluations    Evaluation[]
+  costEvents     CostEvent[]
+  batchItems     BatchItem[]
+  claims         Claim[]
+  taxonomyClaims TaxonomyClaim[]
+  embedding      Unsupported("vector(1536)")?
 
   @@unique([sourceId, externalId])
 }
@@ -149,13 +157,86 @@ model Transcript {
 }
 
 model Extraction {
-  id            String   @id @default(cuid())
-  videoId       String
-  video         Video    @relation(fields: [videoId], references: [id])
-  model         String
-  promptVersion String
-  rawJson       Json
-  createdAt     DateTime @default(now())
+  id             String          @id @default(cuid())
+  videoId        String
+  video          Video           @relation(fields: [videoId], references: [id])
+  model          String
+  promptVersion  String
+  rawJson        Json
+  createdAt      DateTime        @default(now())
+  claims         Claim[]
+  taxonomyClaims TaxonomyClaim[]
+}
+
+model ClaimGroupingRun {
+  id              String                 @id @default(cuid())
+  status          ClaimGroupingRunStatus @default(RUNNING)
+  totalClaims     Int?
+  totalGroups     Int?
+  errorMessage    String?
+  phase           String?
+  processedVideos Int?                   @default(0)
+  totalVideos     Int?
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  groups          ClaimGroup[]
+  claims          Claim[]
+}
+
+model ClaimGroup {
+  id         String           @id @default(cuid())
+  runId      String
+  run        ClaimGroupingRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  label      String
+  summary    String?
+  claimCount Int              @default(0)
+  createdAt  DateTime         @default(now())
+  claims     Claim[]
+
+  @@index([runId])
+}
+
+model Claim {
+  id                  String                       @id @default(cuid())
+  runId               String
+  run                 ClaimGroupingRun             @relation(fields: [runId], references: [id], onDelete: Cascade)
+  videoId             String
+  video               Video                        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  extractionId        String
+  extraction          Extraction                   @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  groupId             String?
+  group               ClaimGroup?                  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  text                String
+  type                String
+  importance          Float
+  isGoodQuality       Boolean
+  recommendationValue String?
+  embedding           Unsupported("vector(1536)")?
+  createdAt           DateTime                     @default(now())
+
+  @@index([runId])
+  @@index([groupId])
+  @@index([videoId])
+}
+
+model TaxonomyClaim {
+  id                   String     @id @default(cuid())
+  extractionId         String
+  extraction           Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  videoId              String
+  video                Video      @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  claimIndex           Int
+  text                 String
+  type                 String
+  importance           Float?
+  taxonomyCategoryId   String?
+  taxonomyTopic        String?
+  taxonomyClassifiedAt DateTime?
+  createdAt            DateTime   @default(now())
+
+  @@unique([extractionId, claimIndex])
+  @@index([taxonomyCategoryId])
+  @@index([videoId])
 }
 
 model Evaluation {
