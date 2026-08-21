@@ -17,8 +17,8 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="min-h-screen bg-gray-50">
-          <nav className="bg-gray-900 px-6 py-3 text-white">
-            <div className="flex items-center gap-6">
+          <nav className="bg-gray-900 px-3 py-3 text-white sm:px-6">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:gap-6">
               <span className="text-lg font-bold">📹 VRB Admin</span>
               <Link href="/" className="text-sm hover:text-gray-300">
                 Dashboard
@@ -37,7 +37,7 @@ export default function RootLayout({
               </Link>
             </div>
           </nav>
-          <main className="p-6">{children}</main>
+          <main className="p-3 sm:p-6">{children}</main>
         </div>
       </body>
     </html>

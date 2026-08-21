@@ -50,7 +50,7 @@ export default function SearchPage() {
         similarity. Requires videos to be fully processed with embeddings.
       </p>
 
-      <form onSubmit={handleSearch} className="mb-6 flex gap-3">
+      <form onSubmit={handleSearch} className="mb-6 flex flex-col gap-3 sm:flex-row">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -60,7 +60,7 @@ export default function SearchPage() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50 sm:shrink-0"
         >
           {loading ? "Searching..." : "Search"}
         </button>

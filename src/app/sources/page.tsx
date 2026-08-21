@@ -76,19 +76,19 @@ export default function SourcesPage() {
 
       <div className="mb-6 rounded-lg bg-white p-4 shadow">
         <h2 className="mb-3 font-semibold">Add Source</h2>
-        <form onSubmit={handleAdd} className="flex flex-wrap gap-3">
+        <form onSubmit={handleAdd} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <input
             placeholder="URL"
             value={form.url}
             onChange={(e) => setForm((current) => ({ ...current, url: e.target.value }))}
-            className="min-w-48 flex-1 rounded border px-3 py-2 text-sm"
+            className="w-full min-w-0 flex-1 rounded border px-3 py-2 text-sm sm:min-w-48"
             required
           />
           <input
             placeholder="Name"
             value={form.name}
             onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
-            className="w-48 rounded border px-3 py-2 text-sm"
+            className="w-full rounded border px-3 py-2 text-sm sm:w-48"
             required
           />
           <input
@@ -101,7 +101,7 @@ export default function SourcesPage() {
                 requestedVideoCount: e.target.value,
               }))
             }
-            className="w-32 rounded border px-3 py-2 text-sm"
+            className="w-full rounded border px-3 py-2 text-sm sm:w-32"
             required
           />
           <button
@@ -113,8 +113,8 @@ export default function SourcesPage() {
         </form>
       </div>
 
-      <div className="overflow-hidden rounded-lg bg-white shadow">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg bg-white shadow">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="border-b bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">

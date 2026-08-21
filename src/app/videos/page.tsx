@@ -156,8 +156,8 @@ function VideosContent() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-lg bg-white shadow">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg bg-white shadow">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="border-b bg-gray-50">
             <tr>
               <th className="w-16 px-4 py-3 text-left font-medium text-gray-600">

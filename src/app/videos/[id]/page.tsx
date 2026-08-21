@@ -168,13 +168,13 @@ export default function VideoDetailPage() {
       </div>
 
       <div className="mb-6 rounded-lg bg-white p-6 shadow">
-        <div className="flex gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row">
           {video.thumbnail && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={video.thumbnail}
               alt=""
-              className="h-28 w-40 rounded object-cover"
+              className="h-28 w-full rounded object-cover sm:w-40"
             />
           )}
           <div className="flex-1">
@@ -241,32 +241,32 @@ export default function VideoDetailPage() {
           )}
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button
             onClick={() => runStage("full")}
             disabled={!!running}
-            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700 disabled:opacity-50"
+            className="w-full rounded bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50 sm:w-auto sm:py-1.5"
           >
             {running === "full" ? "Running..." : "▶ Run Full Pipeline"}
           </button>
           <button
             onClick={() => runStage("transcribe")}
             disabled={!!running}
-            className="rounded bg-purple-600 px-3 py-1.5 text-sm text-white hover:bg-purple-700 disabled:opacity-50"
+            className="w-full rounded bg-purple-600 px-3 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50 sm:w-auto sm:py-1.5"
           >
             {running === "transcribe" ? "Running..." : "Re-transcribe"}
           </button>
           <button
             onClick={() => runStage("extract")}
             disabled={!!running}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            className="w-full rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-1.5"
           >
             {running === "extract" ? "Running..." : "Re-extract"}
           </button>
           <button
             onClick={() => runStage("evaluate")}
             disabled={!!running}
-            className="rounded bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-700 disabled:opacity-50"
+            className="w-full rounded bg-amber-600 px-3 py-2 text-sm text-white hover:bg-amber-700 disabled:opacity-50 sm:w-auto sm:py-1.5"
           >
             {running === "evaluate" ? "Running..." : "Re-evaluate"}
           </button>
